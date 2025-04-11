@@ -5,3 +5,4 @@ class PresentationState(TypedDict):
     presentation: Optional[Dict]
     slides: Optional[List[str]]
     css: Optional[str]
+    images: List[str]

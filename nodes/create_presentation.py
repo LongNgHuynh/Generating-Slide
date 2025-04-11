@@ -8,6 +8,7 @@ from io import BytesIO
 from utils.search import Searxng
 import json
 import logging
+import concurrent.futures
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -21,36 +22,6 @@ DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 MAX_RETRIES = 3
 TIMEOUT = 10
-
-# def download_image(url: str, save_path: Optional[Path] = None) -> BytesIO:
-#     """
-#     Download image from URL with retry mechanism and optional saving.
-    
-#     Args:
-#         url: Image URL to download
-#         save_path: Optional path to save the image
-    
-#     Returns:
-#         BytesIO object containing the image data
-#     """
-#     for attempt in range(MAX_RETRIES):
-#         try:
-#             response = requests.get(url, timeout=TIMEOUT)
-#             response.raise_for_status()
-#             image_content = BytesIO(response.content)
-            
-#             if save_path:
-#                 save_path.parent.mkdir(parents=True, exist_ok=True)
-#                 with open(save_path, 'wb') as f:
-#                     f.write(image_content.getvalue())
-            
-#             return image_content
-            
-#         except requests.exceptions.RequestException as e:
-#             if attempt == MAX_RETRIES - 1:
-#                 logger.error(f"Failed to download image from {url}: {str(e)}")
-#                 raise
-#             continue
 
 def extract_img_src(images_url: List[Dict]) -> List[str]:
     """
@@ -82,21 +53,6 @@ def process_slide_images(slide: Dict, searcher: Searxng) -> List[str]:
         )["results"]
         img_src_list = extract_img_src(images_url)
         
-        # saved_images = []
-        # for idx, img_url in enumerate(img_src_list):
-        #     try:
-        #         safe_title = "".join(c if c.isalnum() else "_" for c in slide["title"])
-        #         filename = f"{safe_title}_{idx}.jpg"
-        #         save_path = DATA_DIR / filename
-                
-        #         download_image(img_url, save_path)
-        #         saved_images.append(str(save_path))
-                
-        #     except Exception as e:
-        #         logger.error(f"Failed to process image {img_url}: {str(e)}")
-        #         continue
-                
-        # return saved_images
         return img_src_list
     
     except Exception as e:
@@ -116,8 +72,17 @@ def add_image_to_outline(outline: dict) -> dict:
     searcher = Searxng(images=True)
     
     if "slides" in outline:
-        for slide in outline["slides"]:
-            slide["slide_images"] = process_slide_images(slide, searcher)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Map each slide to its future and maintain original order
+            future_to_slide = {
+                executor.submit(process_slide_images, slide, searcher): i 
+                for i, slide in enumerate(outline["slides"])
+            }
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_slide):
+                slide_index = future_to_slide[future]
+                outline["slides"][slide_index]["slide_images"] = future.result()
     
     return outline
 
@@ -153,10 +118,3 @@ def create_presentation(topic: str) -> dict:
     except Exception as e:
         logger.error(f"Failed to create presentation: {str(e)}")
         raise
-
-if __name__ == "__main__":
-    try:
-        presentation = create_presentation("Artificial Intelligence Basics")
-        print(presentation)
-    except Exception as e:
-        logger.error(f"Main execution failed: {str(e)}")

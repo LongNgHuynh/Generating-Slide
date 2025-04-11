@@ -23,3 +23,4 @@ class GPT_o3(AzureChatOpenAI):
             api_version="2024-12-01-preview",
             **kwargs  
         )
+        
