@@ -1,14 +1,16 @@
 import json
 import urllib.parse
 from typing import List, Optional
-
+from dotenv import load_dotenv
 import httpx
 from langchain.tools.base import StructuredTool
+import os
+load_dotenv()
 
 class Searxng:
     def __init__(
         self,
-        host: str = "https://searxng.vbi-server.com",
+        host: str = os.getenv("SEARXNG_HOST"),
         engines: List[str] = [],
         fixed_max_results: Optional[int] = None,
         images: bool = False,
